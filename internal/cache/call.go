@@ -14,10 +14,9 @@ type callCache struct {
 	pool *redis.Pool
 }
 
-func NewCallCache (pool *redis.Pool) Call {
+func NewCallCache(pool *redis.Pool) Call {
 	return &callCache{pool: pool}
 }
-
 
 func (c callCache) CallToCache(ctx context.Context, call *model.Call) error {
 	conn, err := c.pool.GetContext(ctx)
@@ -31,7 +30,7 @@ func (c callCache) CallToCache(ctx context.Context, call *model.Call) error {
 	}()
 	key := fmt.Sprintf("%s:%s", call.Queue_ID, call.CallID)
 	value, err := json.Marshal(call)
-	_, err = redis.DoWithTimeout(conn, time.Millisecond*200, "SET", key, value)
+	_, err = redis.DoWithTimeout(conn, time.Millisecond*2000, "SET", key, value)
 	if err != nil {
 		return fmt.Errorf("CallToCache %w", err)
 	}
@@ -49,7 +48,7 @@ func (c callCache) CallFromCache(ctx context.Context, queueID, callID string) er
 		}
 	}()
 	key := fmt.Sprintf("%s:%s", queueID, callID)
-	_, err = redis.DoWithTimeout(conn, time.Millisecond*200, "DEL", key)
+	_, err = redis.DoWithTimeout(conn, time.Millisecond*2000, "DEL", key)
 	if err != nil {
 		return fmt.Errorf("CallToCache %w", err)
 	}
@@ -66,23 +65,32 @@ func (c callCache) GetCallsSnapshot(ctx context.Context) ([]*model.Call, error) 
 			log.Println(err)
 		}
 	}()
-	data, err := redis.Values(redis.DoWithTimeout(conn, time.Millisecond*200, "SCAN", 0))
-	if err != nil {
-		return nil, fmt.Errorf("GetCallsSnapshot %w", err)
-	}
-	keys,_ := redis.Strings(data[1], nil)
 	var calls []*model.Call
-	for _,key := range keys {
-		var call model.Call
-		data, err := redis.Bytes(redis.DoWithTimeout(conn, time.Millisecond*200, "GET", key))
+	var cursor = 0
+	for {
+		data, err := redis.Values(redis.DoWithTimeout(conn, time.Millisecond*2000, "SCAN", cursor))
 		if err != nil {
 			return nil, fmt.Errorf("GetCallsSnapshot %w", err)
 		}
-		err = json.Unmarshal(data, &call)
-		if err != nil {
-			return nil, fmt.Errorf("GetCallsSnapshot %w", err)
+		cursor, _ = redis.Int(data[0], nil)
+		keys, _ := redis.Strings(data[1], nil)
+
+		for _, key := range keys {
+			var call model.Call
+			data, err := redis.Bytes(redis.DoWithTimeout(conn, time.Millisecond*2000, "GET", key))
+			if err != nil {
+				return nil, fmt.Errorf("GetCallsSnapshot %w", err)
+			}
+			err = json.Unmarshal(data, &call)
+			if err != nil {
+				return nil, fmt.Errorf("GetCallsSnapshot %w", err)
+			}
+			calls = append(calls, &call)
 		}
-		calls = append(calls, &call)
+		if cursor == 0 {
+			break
+		}
+		log.Println("redis done")
 	}
 	return calls, nil
 }

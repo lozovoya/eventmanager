@@ -3,7 +3,9 @@ package main
 import (
 	"EventManager/internal/api/httpserver"
 	v1 "EventManager/internal/api/v1"
+	"EventManager/internal/bus"
 	"EventManager/internal/cache"
+	"fmt"
 	"github.com/go-chi/chi/v5"
 	"log"
 	"net"
@@ -12,10 +14,11 @@ import (
 )
 
 const (
-	defaultPort     = "9999"
-	defaultHost     = "0.0.0.0"
+	defaultPort = "9999"
+	defaultHost = "0.0.0.0"
 	//defaultCacheDSN = "redis://eventscache:6379/0"
 	defaultCacheDSN = "redis://localhost:6379/0"
+	defaultBusDSN   = "amqp://guest:guest@localhost:5672/"
 	//PRIVATEKEY      = "./keys/private.key"
 	//PUBLICKEY       = "./keys/public.key"
 )
@@ -36,22 +39,35 @@ func main() {
 		cacheDSN = defaultCacheDSN
 	}
 
-	if err := execute(net.JoinHostPort(host, port), cacheDSN); err != nil {
+	busDSN, ok := os.LookupEnv("EV_BUS")
+	if !ok {
+		busDSN = defaultBusDSN
+
+	}
+
+	if err := execute(net.JoinHostPort(host, port), cacheDSN, busDSN); err != nil {
 		log.Println(err)
 		os.Exit(1)
 	}
 }
 
-func execute (addr, cacheDSN string) (err error) {
+func execute(addr, cacheDSN, busDSN string) (err error) {
 	cacheCallPool := cache.InitCache(cacheDSN)
 	cacheCall := cache.NewCallCache(cacheCallPool)
+
+	busConn, err := bus.InitBus(busDSN)
+	if err != nil {
+		return fmt.Errorf("Execute: %w", err)
+	}
+
+	log.Println(busConn)
 
 	eventsController := v1.NewEventsController(cacheCall)
 
 	router := httpserver.NewRouter(chi.NewRouter(), eventsController)
 	server := http.Server{
-		Addr:              addr,
-		Handler:           &router,
+		Addr:    addr,
+		Handler: &router,
 	}
 
 	return server.ListenAndServe()
