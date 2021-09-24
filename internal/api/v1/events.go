@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"EventManager/internal/bus"
 	"EventManager/internal/cache"
 	"EventManager/internal/model"
 	"EventManager/internal/views"
@@ -12,13 +13,14 @@ import (
 
 type Event struct {
 	callEvent cache.Call
+	bus       bus.Call
 }
 
-func NewEventsController (callEvent cache.Call) *Event {
-	return &Event{callEvent: callEvent}
+func NewEventsController(callEvent cache.Call, bus bus.Call) *Event {
+	return &Event{callEvent: callEvent, bus: bus}
 }
 
-func (e *Event) InEvent (writer http.ResponseWriter, request *http.Request) {
+func (e *Event) InEvent(writer http.ResponseWriter, request *http.Request) {
 	var event *CallEventDTO
 	err := json.NewDecoder(request.Body).Decode(&event)
 	if err != nil {
@@ -40,22 +42,30 @@ func (e *Event) InEvent (writer http.ResponseWriter, request *http.Request) {
 	currentCall.Queue_ID = event.Data.Queue_ID
 
 	switch event.Type {
-	case "OnQueueInEvent": {
-		err = e.callEvent.CallToCache(request.Context(),  &currentCall)
-		if err != nil {
-			log.Println(fmt.Errorf("InEvent: %w", err))
-			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
+	case "OnQueueInEvent":
+		{
+			err = e.callEvent.CallToCache(request.Context(), &currentCall)
+			if err != nil {
+				log.Println(fmt.Errorf("InEvent: %w", err))
+				http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				return
+			}
+			err = e.bus.CallToBus(request.Context(), &currentCall)
+			if err != nil {
+				log.Println(fmt.Errorf("InEvent: %w", err))
+				http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				return
+			}
 		}
-	}
-	case "OnQueueOutEvent": {
-		err = e.callEvent.CallFromCache(request.Context(),  currentCall.Queue_ID, currentCall.CallID)
-		if err != nil {
-			log.Println(fmt.Errorf("InEvent: %w", err))
-			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
+	case "OnQueueOutEvent":
+		{
+			err = e.callEvent.CallFromCache(request.Context(), currentCall.Queue_ID, currentCall.CallID)
+			if err != nil {
+				log.Println(fmt.Errorf("InEvent: %w", err))
+				http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				return
+			}
 		}
-	}
 	default:
 		log.Printf("InEvent: wrong type. %s", event.EventID)
 		http.Error(writer, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
