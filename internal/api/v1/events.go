@@ -13,10 +13,10 @@ import (
 
 type Event struct {
 	callEvent cache.Call
-	busConn   bus.Call
+	busConn   bus.Event
 }
 
-func NewEventsController(callEvent cache.Call, busConn bus.Call) *Event {
+func NewEventsController(callEvent cache.Call, busConn bus.Event) *Event {
 	return &Event{callEvent: callEvent, busConn: busConn}
 }
 
@@ -41,6 +41,12 @@ func (e *Event) InEvent(writer http.ResponseWriter, request *http.Request) {
 	currentCall.DialedNumber = event.Data.DialedNumber
 	currentCall.Queue_ID = event.Data.Queue_ID
 
+	var curentEvent model.Event
+	curentEvent.EventID = event.EventID
+	curentEvent.Type = event.Type
+	curentEvent.Timestamp = event.Timestamp
+	curentEvent.Data = currentCall
+
 	switch event.Type {
 	case "OnQueueInEvent":
 		{
@@ -50,7 +56,7 @@ func (e *Event) InEvent(writer http.ResponseWriter, request *http.Request) {
 				http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 				return
 			}
-			err = e.busConn.CallToBus(request.Context(), &currentCall)
+			err = e.busConn.EventToBus(request.Context(), &curentEvent)
 			if err != nil {
 				log.Println(fmt.Errorf("InEvent: %w", err))
 				http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -60,6 +66,12 @@ func (e *Event) InEvent(writer http.ResponseWriter, request *http.Request) {
 	case "OnQueueOutEvent":
 		{
 			err = e.callEvent.CallFromCache(request.Context(), currentCall.Queue_ID, currentCall.CallID)
+			if err != nil {
+				log.Println(fmt.Errorf("InEvent: %w", err))
+				http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				return
+			}
+			err = e.busConn.EventToBus(request.Context(), &curentEvent)
 			if err != nil {
 				log.Println(fmt.Errorf("InEvent: %w", err))
 				http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

@@ -9,19 +9,15 @@ import (
 	"log"
 )
 
-//type rabbitBus struct {
-//	busConn *amqp.Connection
-//}
-
-func NewCallBus(busConn *amqp.Connection) Call {
+func NewEventBus(busConn *amqp.Connection) Event {
 	return &rabbitBus{busConn: busConn}
 }
 
-func (r rabbitBus) CallToBus(ctx context.Context, call *model.Call) error {
+func (r rabbitBus) EventToBus(ctx context.Context, event *model.Event) error {
 
 	amqpChannel, err := r.busConn.Channel()
 	if err != nil {
-		return fmt.Errorf("Execute: %w", err)
+		return fmt.Errorf("EventToBus: %w", err)
 	}
 	defer amqpChannel.Close()
 
@@ -33,11 +29,11 @@ func (r rabbitBus) CallToBus(ctx context.Context, call *model.Call) error {
 		false,
 		nil)
 	if err != nil {
-		return fmt.Errorf("CallToBus: %w", err)
+		return fmt.Errorf("EventToBus: %w", err)
 	}
-	body, err := json.Marshal(&call)
+	body, err := json.Marshal(&event)
 	if err != nil {
-		return fmt.Errorf("CallToBus: %w", err)
+		return fmt.Errorf("EventToBus: %w", err)
 	}
 
 	err = amqpChannel.Publish("", queue.Name, false, false, amqp.Publishing{
@@ -46,9 +42,9 @@ func (r rabbitBus) CallToBus(ctx context.Context, call *model.Call) error {
 		Body:         body,
 	})
 	if err != nil {
-		return fmt.Errorf("CallToBus: %w", err)
+		return fmt.Errorf("EventToBus: %w", err)
 	}
 
-	log.Printf("message sent %s", call.CallID)
+	log.Printf("message sent %s, type %s", event.EventID, event.Type)
 	return nil
 }
