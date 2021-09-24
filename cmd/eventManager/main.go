@@ -60,15 +60,9 @@ func execute(addr, cacheDSN, busDSN string) (err error) {
 		return fmt.Errorf("Execute: %w", err)
 	}
 	defer busConn.Close()
+	busCall := bus.NewCallBus(busConn)
 
-	amqpChannel, err := busConn.Channel()
-	if err != nil {
-		return fmt.Errorf("Execute: %w", err)
-	}
-	defer amqpChannel.Close()
-	bus := bus.NewBus(amqpChannel)
-
-	eventsController := v1.NewEventsController(cacheCall, bus)
+	eventsController := v1.NewEventsController(cacheCall, busCall)
 
 	router := httpserver.NewRouter(chi.NewRouter(), eventsController)
 	server := http.Server{

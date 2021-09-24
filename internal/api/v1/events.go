@@ -13,11 +13,11 @@ import (
 
 type Event struct {
 	callEvent cache.Call
-	bus       bus.Call
+	busConn   bus.Call
 }
 
-func NewEventsController(callEvent cache.Call, bus bus.Call) *Event {
-	return &Event{callEvent: callEvent, bus: bus}
+func NewEventsController(callEvent cache.Call, busConn bus.Call) *Event {
+	return &Event{callEvent: callEvent, busConn: busConn}
 }
 
 func (e *Event) InEvent(writer http.ResponseWriter, request *http.Request) {
@@ -50,7 +50,7 @@ func (e *Event) InEvent(writer http.ResponseWriter, request *http.Request) {
 				http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 				return
 			}
-			err = e.bus.CallToBus(request.Context(), &currentCall)
+			err = e.busConn.CallToBus(request.Context(), &currentCall)
 			if err != nil {
 				log.Println(fmt.Errorf("InEvent: %w", err))
 				http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
