@@ -88,7 +88,7 @@ func (e *Event) InEvent(writer http.ResponseWriter, request *http.Request) {
 }
 
 func (e *Event) GetSnapShot(writer http.ResponseWriter, request *http.Request) {
-	calls, err := e.callEvent.GetCallsSnapshot3(request.Context())
+	calls, err := e.callEvent.GetCallsSnapshot(request.Context())
 	if err != nil {
 		log.Println(fmt.Errorf("GetSnapShot: %w", err))
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
