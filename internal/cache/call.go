@@ -68,25 +68,23 @@ func (c callCache) GetCallsSnapshot(ctx context.Context) ([]*model.Call, error) 
 	}()
 
 	var calls []*model.Call
-	wg := sync.WaitGroup{}
+	wgRedis, wgResult := sync.WaitGroup{}, sync.WaitGroup{}
 	resultCh := make(chan []*model.Call)
 	keysCh := make(chan []string)
 
 	go func() {
+		wgResult.Add(1)
 		for r := range resultCh {
-			log.Printf("recording calls to slice: %d", len(calls))
 			result := r
 			calls = append(calls, result...)
 		}
-		log.Println("recording calls is finished")
-
+		wgResult.Done()
 	}()
 
 	go func() {
 		var cursor = 0
 		var counter = 1000
 		for {
-			log.Printf("redis works, counter %d", counter)
 			data, err := redis.Values(redis.DoWithTimeout(conn, time.Millisecond*2000, "SCAN", cursor, "COUNT", counter))
 			if err != nil {
 				fmt.Errorf("GetCallsSnapshot %w", err)
@@ -94,21 +92,16 @@ func (c callCache) GetCallsSnapshot(ctx context.Context) ([]*model.Call, error) 
 			}
 			cursor, _ = redis.Int(data[0], nil)
 			keys, _ := redis.Strings(data[1], nil)
-			log.Printf("keys length: %d", len(keys))
 			keysCh <- keys
 			if cursor == 0 {
 				close(keysCh)
 				break
 			}
 		}
-		log.Println("redis done")
 	}()
 
-	i := 0
 	for keys := range keysCh {
-		wg.Add(1)
-		i++
-		log.Printf("start gr %d", i)
+		wgRedis.Add(1)
 		go func(keys []string, wg *sync.WaitGroup) {
 			conn, err := c.pool.GetContext(ctx)
 			if err != nil {
@@ -117,7 +110,6 @@ func (c callCache) GetCallsSnapshot(ctx context.Context) ([]*model.Call, error) 
 			defer conn.Close()
 			var calls []*model.Call
 			for _, key := range keys {
-				//log.Printf("searching keys in redis: %s", key)
 				var call model.Call
 				data, _ := redis.Bytes(redis.DoWithTimeout(conn, time.Millisecond*2000, "GET", key))
 				if err != nil {
@@ -129,15 +121,13 @@ func (c callCache) GetCallsSnapshot(ctx context.Context) ([]*model.Call, error) 
 				}
 				calls = append(calls, &call)
 			}
-			log.Println("send result to channel")
 			resultCh <- calls
 			wg.Done()
-		}(keys, &wg)
+		}(keys, &wgRedis)
+
 	}
-
-	log.Println("wait for gr")
-	wg.Wait()
+	wgRedis.Wait()
 	close(resultCh)
-
+	wgResult.Wait()
 	return calls, nil
 }

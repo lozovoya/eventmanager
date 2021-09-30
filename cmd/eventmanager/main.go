@@ -14,13 +14,11 @@ import (
 )
 
 const (
-	defaultPort = "9999"
-	defaultHost = "0.0.0.0"
-	//defaultCacheDSN = "redis://eventscache:6379/0"
-	defaultCacheDSN = "redis://localhost:6379/0"
-	defaultBusDSN   = "amqp://guest:guest@localhost:5672/"
-	//PRIVATEKEY      = "./keys/private.key"
-	//PUBLICKEY       = "./keys/public.key"
+	defaultPort     = "9999"
+	defaultHost     = "0.0.0.0"
+	defaultCacheDSN = "redis://eventcache:6379/0"
+	//defaultCacheDSN = "redis://localhost:6379/0"
+	defaultBusDSN = "amqp://guest:guest@eventbus:5672/"
 )
 
 func main() {
